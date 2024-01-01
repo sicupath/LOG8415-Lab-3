@@ -1,73 +1,80 @@
-import sys
 import time
 import boto3
+from ec2_instances import *
+from security_groups import *
 import paramiko
 import subprocess
-from instances import *
-from securityGroup import *
-
 
 def main():
-    
-    if len(sys.argv) < 2:
-        print('ERROR! Make sure the command has the (172.31.16.0/20) subnet, like this => python3 standalone.py "subnet-XXXXXXXXXXXXXXXXX"')
-        exit()
         
-    subnet_id = str(sys.argv[1])
-    
+    # Initialize AWS EC2 client and resource
+    print("Initializing client and resource")
     ec2_client = boto3.client("ec2", region_name="us-east-1")
-
     ec2_resource = boto3.resource("ec2", region_name="us-east-1")
     
-    
-    #get vpc_id
-    vpc_id = ec2_client.describe_vpcs().get('Vpcs', [{}])[0].get('VpcId', '')
-     # create security group
-    security_group = create_standalone_security_group(ec2_client,"standalone_group",vpc_id)
-    
-    time.sleep(10)
+    # Get the default VPC ID (function declared later) and create a security group
+    print("Creating standalone security group")
+    vpc_id = get_default_vpc_id(ec2_client)
+    security_group = create_standalone_security_group(ec2_client, "standalone_group", vpc_id)
+    time.sleep(60) # Wait for the security group to be fully created
+    # Get the security group ID
+    security_group_id = security_group['GroupId']
+    print("Security group created successfully")
 
-    # Create EC2 instance
-    instance = create_standalone_instance(ec2_resource, security_group['GroupId'], subnet_id)
-
-    print("Waiting for standalone instance to be ok...")
+    # Create an EC2 instance with the provided security group and a subnet 
+    instance = create_standalone_instance(ec2_resource, security_group_id, '172.31.64.9')
+    
+    # Wait for the instance to be fully initialized and ready
+    print("Waiting for standalone instance to be ready...")
     waiter = ec2_client.get_waiter('instance_status_ok')
-    waiter.wait(InstanceIds=[instance[0].id])
+    waiter.wait(InstanceIds=[instance_id])
+    # Get the instance ID
+    instance_id = instance[0].id
     
-    # Get public IP
-    reservations = ec2_client.describe_instances(InstanceIds=[instance[0].id])['Reservations']
-    ip = reservations[0]["Instances"][0].get('PublicIpAddress')
+    # Retrieve the public IP address of the created instance
+    reservations = ec2_client.describe_instances(InstanceIds=[instance_id])['Reservations']
+    public_ip = reservations[0]["Instances"][0].get('PublicIpAddress')
     
-    time.sleep(180)
-    
-    print("STANDALONE BENCHMARK:")
-    
-    key = paramiko.RSAKey.from_private_key_file("labsuser.pem")
+    # Perform benchmark tests and retrieve results
+    perform_benchmark(public_ip)
+    retrieve_benchmark_results(public_ip)
+
+    # Cleanup: Terminate the EC2 instance and security group                     
+    print("Terminating instance")
+    ec2_client.terminate_instances(InstanceIds=(instance_id))
+    time.sleep(180) # Time for instance to be completely gone
+    print("Terminating security group")
+    ec2_client.delete_security_group(GroupId=security_group_id)
+
+
+# Complementary functions
+
+def get_default_vpc_id(ec2_client):
+    # Retrieve the ID of the default Virtual Private Cloud (VPC)
+    return ec2_client.describe_vpcs().get('Vpcs', [{}])[0].get('VpcId', '')
+
+def perform_benchmark(public_ip):
+    # Perform benchmark tests on the instance
+    print("Performing Standalone benchmark")
+    execute_benchmark_commands(public_ip, [
+        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root prepare",
+        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root --num-threads=6 --max-time=60 --max-requests=0 run > standalone_benchmark.txt", 
+        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root cleanup"
+    ])
+
+def execute_benchmark_commands(public_ip, commands):
+    # Connect to the instance via SSH and execute the given commands
+    key = paramiko.RSAKey.from_private_key_file("key.pem")
     SSHClient = paramiko.SSHClient()
     SSHClient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    SSHClient.connect(public_ip, username='ubuntu', pkey=key)
     
-    SSHClient.connect(ip, username='ubuntu', pkey=key)
-    print('Connected to: ' + str(ip))
-
-    commands = [
-        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root prepare",
-        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root --num-threads=6 --max-time=60 --max-requests=0 run > standaloneBenchmark.txt", 
-        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root cleanup"
-    ]
     for command in commands:
-        stdin , stdout, stderr = SSHClient.exec_command(command)
-        print(stdout.read())
-        print(stderr.read())
-    
-    print("SCP the benchmark results into local folder...")
-    subprocess.call(['scp', '-o','StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-i', 'labsuser.pem', "ubuntu@" + str(ip) + ":standaloneBenchmark.txt", '.'])
-    
-    print("Terminating instance...")
-    terminate_instance(ec2_client, [instance[0].id])
-    print("Giving 3 min to make sure vpc endpoints from instance are gone before deleting security group...")
-    time.sleep(180)
-    print("Terminating security group...")
-    delete_security_group(ec2_client, security_group['GroupId'])
+        stdin, stdout, stderror = SSHClient.exec_command(command)
 
-
+def retrieve_benchmark_results(public_ip):
+    # Retrieve the benchmark results file from the instance to the local machine
+    print("Getting benchmark results")
+    subprocess.call(['scp', '-o','StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-i', 'key.pem', f"ubuntu@{public_ip}:standalone_benchmark.txt", '.'])
+    
 main()

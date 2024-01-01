@@ -1,36 +1,34 @@
-# Create t2.micro instance for the standalone MYSQL instance
-def create_standalone_instance(ec2, securityGroup, subnet_id):
-    """
-    Function that creates t2.micro instance for the standalone MYSQL instance
-    :param ec2_client: The ec2 client that creates the instance
-    :param securityGroup: The id of the security group
-    :param subnet_id: The subnet id where the instance will be
-    :returns: the created instance
-    """
-    instance = ec2.create_instances(
-        ImageId="ami-0574da719dca65348",
-        InstanceType="t2.micro",
-        KeyName="vockey",
-        UserData=open('standalone_setup.sh').read(),
-        SubnetId=subnet_id,
-        SecurityGroupIds=[
-            securityGroup
-        ],
-        MaxCount=1,
-        MinCount=1,
-        TagSpecifications=[
-        {
-            'ResourceType': 'instance',
-            'Tags': [
-                {
-                    'Key': 'Name',
-                    'Value': 'MYSQL-Standalone'
-                },
-            ]
-        },
-        ]
-        )
 
+def create_standalone_instance(ec2_resource, security_group_id, subnet_id):
+    # This function creates an EC2 instance (a virtual server) in AWS.
+
+    # Specify the configuration for the new instance.
+    instance_config = {
+        'ImageId': "ami-0574da719dca65348",  # ID of the Amazon Machine Image (AMI) to use.
+        'InstanceType': "t2.micro",  # Type of instance (t2.micro is a small, affordable type).
+        'KeyName': "vockey",  # Name of the key pair for SSH access.
+        'UserData': open('standalone.sh').read(),  # Script to run on instance initialization.
+        'SubnetId': subnet_id,  # ID of the subnet where the instance will be created.
+        'SecurityGroupIds': [security_group_id],  # ID of the security group to apply.
+        'MaxCount': 1,  # Maximum number of instances to launch.
+        'MinCount': 1,  # Minimum number of instances to launch.
+        'TagSpecifications': [
+            {
+                'ResourceType': 'instance',
+                'Tags': [
+                    {
+                        'Key': 'Name',
+                        'Value': 'MYSQL Standalone EC2 Instance'
+                    },
+                ]
+            },
+        ]
+    }
+
+    # Create the instance with the specified configuration.
+    instance = ec2_resource.create_instances(**instance_config)
+
+    # Return the created instance.
     return instance
 
 
@@ -110,15 +108,3 @@ def create_proxy_instance(ec2, ip_address, securityGroup, subnet_id):
         )
 
     return instance
-
-
-# This function is defined to terminate the instance.
-def terminate_instance(client, instanceId):
-    """
-    Function that terminate instance from given instance id
-    :param client: The ec2 client that will delete the instance
-    :param instanceId: The id of the instance to delete
-    """
-    print('terminating instance:')
-    print(instanceId)
-    client.terminate_instances(InstanceIds=(instanceId))
