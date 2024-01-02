@@ -63,20 +63,5 @@ def create_cluster_security_group(ec2_client, group_name, vpc_id):
     return security_group
 
 
-def create_proxy_security_group(ec2_client, sg_name, vpc_id):
-    """
-    Function that creates security group for the proxy and assigns inbound rules
-    :param ec2_client: The ec2 client that creates the security group
-    :param sg_name: The name of the security group
-    :param vpc_id: id of the vpc need to create security group
-    :returns: the created security group
-    """
-    security_group = ec2_client.create_security_group(
-        Description="MYSQL Proxy Security Group",
-        GroupName=sg_name,
-        VpcId=vpc_id
-    )
-    add_cluster_inbound_rules(ec2_client, security_group['GroupId'])
-    return security_group
-    
+
 
