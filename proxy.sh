@@ -10,4 +10,4 @@ sudo apt-get install -y python3 python3-pip
 pip3 install ping3
 
 # Run the proxy.py script
-python3 /path/to/proxy.py
+python3 proxy.py
