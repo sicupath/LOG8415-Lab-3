@@ -2,6 +2,10 @@ import socket
 import threading
 import random
 import ping3
+import boto3
+from ec2_instances import *
+from security_groups import *
+import time
 
 class ProxyServer:
     def __init__(self, host, port, nodes):
@@ -94,8 +98,43 @@ nodes = {
     'node3': 'ip-172-31-22-9.ec2.internal'
 }
 
+# Complementary functions
+
+def get_default_vpc_id(ec2_client):
+    # Retrieve the ID of the default Virtual Private Cloud (VPC)
+    return ec2_client.describe_vpcs().get('Vpcs', [{}])[0].get('VpcId', '')
+
+
 # Main execution
 if __name__ == "__main__":
+    # Initialize AWS EC2 client and resource for interacting with AWS
+    print("Initializing client and resource")
+    ec2_client = boto3.client("ec2", region_name="us-east-1")
+    ec2_resource = boto3.resource("ec2", region_name="us-east-1")
+    
+    # Get the default VPC ID (function declared later) and create a security group
+    print("Creating cluster security group")
+    vpc_id = get_default_vpc_id(ec2_client)
+    security_group = create_cluster_security_group(ec2_client,"cluster_group",vpc_id)
+    time.sleep(60) # Wait for the security group to be fully created
+    # Get the security group ID
+    security_group_id = security_group['GroupId']
+    print("Security group created successfully")
+
+    # Create instances for the cluster: one master node and three slave or data nodes.
+    master = create_proxy_server_instance(ec2_resource, "172.31.22.6", security_group_id, open('cluster_management_setup.sh').read(), "Master")
+    slaves = [
+        create_cluster_instance(ec2_resource, "172.31.22.7", security_group_id, open('data_node.sh').read(), "Slave-1"),
+        create_cluster_instance(ec2_resource, "172.31.22.8", security_group_id, open('data_node.sh').read(), "Slave-2"),
+        create_cluster_instance(ec2_resource, "172.31.22.9", security_group_id, open('data_node.sh').read(), "Slave-3")
+    ]
+
+    print("Waiting for cluster instances to be ready")
+    # Wait until all instances are fully operational.
+    instances_ids = [master[0].id] + [node[0].id for node in slaves]
+    waiter = ec2_client.get_waiter('instance_status_ok')
+    waiter.wait(InstanceIds=instances_ids)
+    
     # Start the proxy server on the specified IP and port
     proxy = ProxyServer('0.0.0.0', 8000, nodes)
     proxy.start()
