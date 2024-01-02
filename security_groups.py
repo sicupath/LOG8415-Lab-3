@@ -28,21 +28,40 @@ def create_standalone_security_group(ec2_client, group_name, vpc_id):
     # Return the created security group information.
     return security_group
 
-def create_cluster_security_group(ec2_client, sg_name, vpc_id):
-    """
-    Function that creates security group for cluster and assigns inbound rules
-    :param ec2_client: The ec2 client that creates the security group
-    :param sg_name: The name of the security group
-    :param vpc_id: id of the vpc need to create security group
-    :returns: the created security group
-    """
+def create_cluster_security_group(ec2_client, group_name, vpc_id):
+    # This function creates a new security group for a MySQL Cluster within a specified VPC (Virtual Private Cloud).
+
+    # Create the security group with a description and a name within the specified VPC.
     security_group = ec2_client.create_security_group(
         Description="MYSQL Cluster Security Group",
-        GroupName=sg_name,
+        GroupName=group_name,
         VpcId=vpc_id
     )
-    add_cluster_inbound_rules(ec2_client, security_group['GroupId'])
+
+    # Define inbound rules for the security group to control incoming network traffic.
+    inbound_rules = [
+        {
+            # Allow SSH (Secure Shell) access over TCP protocol on port 22 from any IP address.
+            'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22,
+            'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
+        },
+        {
+            # Allow MySQL Cluster traffic on a custom port (1186) from a specific IP range.
+            # This rule is specific to the cluster communication.
+            'IpProtocol': '-1', 'FromPort': 1186, 'ToPort': 1186,
+            'IpRanges': [{'CidrIp': '172.31.16.0/20'}]
+        }
+    ]
+
+    # Apply the defined rules to the security group.
+    ec2_client.authorize_security_group_ingress(
+        GroupId=security_group['GroupId'],
+        IpPermissions=inbound_rules
+    )
+
+    # Return the created security group information.
     return security_group
+
 
 def create_proxy_security_group(ec2_client, sg_name, vpc_id):
     """
@@ -60,23 +79,4 @@ def create_proxy_security_group(ec2_client, sg_name, vpc_id):
     add_cluster_inbound_rules(ec2_client, security_group['GroupId'])
     return security_group
     
-
-def add_cluster_inbound_rules(ec2_client, sg_id):
-    """
-    Function that assigns inbound rules to the cluster security group
-    :param ec2_client: The ec2 client that will assign rules
-    :param sg_id: Security group's id
-    """
-
-    inbound_rules = [
-        {
-            'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22,
-            'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
-        },
-        {
-            'IpProtocol': '-1', 'FromPort': 1186, 'ToPort': 1186,
-            'IpRanges': [{'CidrIp': '172.31.16.0/20'}]
-        }
-        ]
-    ec2_client.authorize_security_group_ingress(GroupId=sg_id, IpPermissions=inbound_rules)
 

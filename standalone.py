@@ -25,7 +25,7 @@ def main():
     instance = create_standalone_instance(ec2_resource, security_group_id, '172.31.64.9')
     
     # Wait for the instance to be fully initialized and ready
-    print("Waiting for standalone instance to be ready...")
+    print("Waiting for standalone instance to be ready")
     waiter = ec2_client.get_waiter('instance_status_ok')
     waiter.wait(InstanceIds=[instance_id])
     # Get the instance ID
@@ -58,7 +58,7 @@ def perform_benchmark(public_ip):
     print("Performing Standalone benchmark")
     execute_benchmark_commands(public_ip, [
         "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root prepare",
-        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root --num-threads=6 --max-time=60 --max-requests=0 run > standalone_benchmark.txt", 
+        "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root --num-threads=6 --max-time=60 --max-requests=0 run > standalone_benchmarking.txt", 
         "sudo sysbench oltp_read_write --table-size=100000 --mysql-db=sakila --db-driver=mysql --mysql-user=root cleanup"
     ])
 
@@ -70,11 +70,11 @@ def execute_benchmark_commands(public_ip, commands):
     SSHClient.connect(public_ip, username='ubuntu', pkey=key)
     
     for command in commands:
-        stdin, stdout, stderror = SSHClient.exec_command(command)
+        SSHClient.exec_command(command)
 
 def retrieve_benchmark_results(public_ip):
     # Retrieve the benchmark results file from the instance to the local machine
     print("Getting benchmark results")
-    subprocess.call(['scp', '-o','StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-i', 'key.pem', f"ubuntu@{public_ip}:standalone_benchmark.txt", '.'])
+    subprocess.call(['scp', '-o','StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-i', 'key.pem', f"ubuntu@{public_ip}:standalone_benchmarking.txt", '.'])
     
 main()
