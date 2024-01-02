@@ -62,6 +62,46 @@ def create_cluster_security_group(ec2_client, group_name, vpc_id):
     # Return the created security group information.
     return security_group
 
+def create_gatekeeper_security_group(ec2_client, group_name, vpc_id):
+    security_group = ec2_client.create_security_group(
+        Description="MYSQL Cluster Security Group",
+        GroupName=group_name,
+        VpcId=vpc_id
+    )
+
+    # Define inbound rules
+    inbound_rules = [
+        {
+            'IpProtocol': 'tcp', 'FromPort': 22, 'ToPort': 22,
+            'IpRanges': [{'CidrIp': 'YOUR_ADMIN_IP/32'}]  # Replace with the specific admin IP
+        },
+        {
+            'IpProtocol': 'tcp', 'FromPort': 3306, 'ToPort': 3306,
+            'IpRanges': [{'CidrIp': 'NODE1_IP/32'}, {'CidrIp': 'NODE2_IP/32'}]  # Replace with specific node IPs
+        }
+        # Add more rules as needed
+    ]
+
+    # Define egress rules 
+    egress_rules = [
+        # Example: Allow all outbound traffic to specific IPs or ranges
+        {'IpProtocol': '-1', 'IpRanges': [{'CidrIp': 'SPECIFIC_IP_OR_RANGE'}]}
+    ]
+
+    ec2_client.authorize_security_group_ingress(
+        GroupId=security_group['GroupId'],
+        IpPermissions=inbound_rules
+    )
+
+    # Apply egress rules
+    ec2_client.authorize_security_group_egress(
+        GroupId=security_group['GroupId'],
+        IpPermissions=egress_rules
+    )
+
+    return security_group
+
+
 
 
 

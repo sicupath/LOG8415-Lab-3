@@ -136,5 +136,5 @@ if __name__ == "__main__":
     waiter.wait(InstanceIds=instances_ids)
     
     # Start the proxy server on the specified IP and port
-    proxy = ProxyServer('0.0.0.0', 8000, nodes)
+    proxy = ProxyServer('172.31.22.6', 8000, nodes)
     proxy.start()
